@@ -10,7 +10,8 @@
 % 
 % Author: Dylan Winters
 % Created: 2016-09-23
-
+%
+% NOTE: I don't yet trust this function. It still needs some work.
 
 function [R0] = adcp_orientation(v,spd,R0)
 
