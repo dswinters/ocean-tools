@@ -15,6 +15,7 @@ for i = 1:length(fn)
     adcp = [];
     try
         adcp = rdradcp(fn{i},skip,-1);
+        adcp.file = 0*adcp.mtime + i;
         ng = ng+1;
     catch err
     end
@@ -50,6 +51,7 @@ for i = 1:length(fn)
             A.bt_ampl      = cat(2 , A.bt_ampl      , adcp.bt_ampl);
             A.bt_perc_good = cat(2 , A.bt_perc_good , adcp.bt_perc_good);
             A.perc_good    = cat(3 , A.perc_good    , adcp.perc_good);
+            A.file         = cat(2 , A.file         , adcp.file);
         end
     end
 end
