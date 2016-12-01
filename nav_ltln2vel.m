@@ -26,16 +26,21 @@ dn = dn(idx);
 lt = lt(idx);
 ln = ln(idx);
 
-% convert to xy
-lt0 = nanmean(lt);
-ln0 = nanmean(ln);
-scl  = abs(40000000/360) ;   % meters N/S per degree N
-scl2 = scl*cosd(lt0) ;  % meters E/W per degree W at latitude lt0
-%
-y =  scl  * (lt-lt0) ;    % meters N/S
-x =  scl2 * (ln-ln0) ;    % meters E/W
-%
-dt = diff(dn)*86400;
-t = dn(1:end-1)/2 + dn(2:end)/2;
-vx = interp1(t, diff(x)./dt, dn0);
-vy = interp1(t, diff(y)./dt, dn0);
+% convert to xy (need at least 2 non-nan points)
+if sum(idx)>2
+    lt0 = nanmean(lt);
+    ln0 = nanmean(ln);
+    scl  = abs(40000000/360) ;   % meters N/S per degree N
+    scl2 = scl*cosd(lt0) ;  % meters E/W per degree W at latitude lt0
+                            %
+    y =  scl  * (lt-lt0) ;    % meters N/S
+    x =  scl2 * (ln-ln0) ;    % meters E/W
+                              %
+    dt = diff(dn)*86400;
+    t = dn(1:end-1)/2 + dn(2:end)/2;
+    vx = interp1(t, diff(x)./dt, dn0);
+    vy = interp1(t, diff(y)./dt, dn0);
+else
+    vx = nan*dn0;
+    vy = nan*dn0;
+end
