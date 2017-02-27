@@ -128,3 +128,8 @@ for fi = 1:length(f_in)
     end
 end
 
+NAV.files = cell(length(f_in),1);
+for i = 1:length(f_in)
+    [~,fname,~] = fileparts(f_in{i});
+    NAV.files{i} = fname;
+end
