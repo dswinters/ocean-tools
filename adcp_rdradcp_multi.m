@@ -114,3 +114,11 @@ A.bt_corr      = A.bt_corr(:,kp(1:nt));
 A.bt_ampl      = A.bt_ampl(:,kp(1:nt));
 A.bt_perc_good = A.bt_perc_good(:,kp(1:nt));
 A.perc_good    = A.perc_good(:,:,kp(1:nt));
+A.file         = A.file(:,kp);
+
+% Include which files were read
+A.files = cell(length(fn),1);
+for i = 1:length(fn)
+    [fdir fname fext] = fileparts(fn{i})
+    A.files{i} = [fname fext];
+end
