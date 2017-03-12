@@ -6,18 +6,16 @@
 % Author: Dylan Winters
 % Created: Mar 12 2017
 
-function A = adcp_beam2earth(A)
+function A = adcp_beam2earth(A,varargin)
 
-% Save beam velocities
-if strcmp(A.config.coord_sys,'beam');
-    A.beam1_vel = A.east_vel;
-    A.beam2_vel = A.north_vel;
-    A.beam3_vel = A.vert_vel;
-    A.beam4_vel = A.error_vel;
-else
+if ~strcmp(A.config.coord_sys,'beam')
     error(['A.config.coord_sys must be ''beam'''...
            ' (currently ''%s'')'],A.config.coord_sys)
 end
+
+% Replace NaN heading with zeros so MATLAB doesn't complain
+noheading = isnan(A.heading);
+A.heading(noheading) = 0;
 
 % Make a function to pad coordinate transformation matrices
 % so we can use matrix products for full transformation
@@ -36,18 +34,19 @@ b2i = [c*a -c*a  0     0  ;
        d    d    -d   -d  ];
 
 % Convert instrument pitch/roll to ship pitch
-A.pitch_raw = A.pitch;
-A.pitch = atand(tand(A.pitch_raw).*cos(A.roll));
-A.pitch = asind(sind(A.pitch_raw).*cosd(A.roll) ./ ...
-               (1 - (sind(A.pitch_raw).*sind(A.roll)).^2));
+A.tilt1 = A.pitch;
+A.tilt2 = A.roll;
+A.pitch = atand(tand(A.tilt1).*cos(A.roll));
+A.pitch = asind(sind(A.tilt1).*cosd(A.roll) ./ ...
+               sqrt(1 - (sind(A.tilt1).*sind(A.roll)).^2));
 
-% Instrument to ship coordinate transformation matrix
-i2s = pad(rotz(A.config.xducer_misalign));
+% Time-dependent ship-to-earth coordinate transformation matrix
+s2e = @(t) pad(rotz(-A.heading(t)));
 
-% Time-dependent ship to earth coordinate transformation matrix
-s2e = @(t) pad(           ...
-    rotz(-A.heading(t)) * ...
-    rotx(A.pitch(t))    * ...
+% Time-dependent instrument-to-ship coordinate transformation matrix
+i2s = @(t) pad(                       ...
+    rotz(-A.config.xducer_misalign) * ...
+    rotx(A.pitch(t))                * ...
     roty(A.roll(t)));
 
 % Time-dependent depth scale factors (for bin mapping)
@@ -65,23 +64,26 @@ NORTH = nan*A.east_vel;
 VERT  = nan*A.east_vel;
 ERR   = nan*A.east_vel;
 for t = 1:length(A.mtime)
-    % For each ping...
-
     % Depth cell mapping
-    cells = 1:A.config.n_cells;
-    cellidx = fix(feval(ds,t)*cells+0.5);
-    rmcell = cellidx<1 | cellidx>40;
+    if A.config.n_cells > 1;
+        cells = 1:A.config.n_cells;
+        cellidx = fix(feval(ds,t)*cells+0.5);
+    else
+        cellidx = [1;1;1;1];
+    end
+    rmcell = cellidx<1 | cellidx>A.config.n_cells;
     cellidx(rmcell) = 1; % placeholder for invalid cells
 
     % Extract beam velocities from the correct depth cells
-    VB = [A.beam1_vel(cellidx(1,:),t)';
-          A.beam2_vel(cellidx(2,:),t)';
-          A.beam3_vel(cellidx(3,:),t)';
-          A.beam4_vel(cellidx(4,:),t)'];
+    VB = [A.east_vel(cellidx(1,:),t)';
+          A.north_vel(cellidx(2,:),t)';
+          A.vert_vel(cellidx(3,:),t)';
+          A.error_vel(cellidx(4,:),t)'];
+
     VB(rmcell) = NaN; % remove invalid cells
 
     % Apply coordinate transformations
-    VE = feval(s2e,t)*i2s*b2i*VB;
+    VE = feval(s2e,t)*feval(i2s,t)*b2i*VB;
 
     % Store earth-coordinate velocities
     EAST(:,t) = VE(1,:);
@@ -94,6 +96,10 @@ A.east_vel = EAST;
 A.north_vel = NORTH;
 A.vert_vel = VERT;
 A.error_vel = ERROR;
+
+% Remove east & north velocities where we have no heading
+A.east_vel(:,noheading) = NaN;
+A.north_vel(:,noheading) = NaN;
 
 A.config.coord_sys = 'earth';
 A.config.bin_mapping = 'yes';
