@@ -15,7 +15,8 @@ if strcmp(A.config.coord_sys,'beam');
     A.beam3_vel = A.vert_vel;
     A.beam4_vel = A.error_vel;
 else
-    error('Velocities are already in earth coordinates!')
+    error(['A.config.coord_sys must be ''beam'''...
+           ' (currently ''%s'')'],A.config.coord_sys)
 end
 
 % Make a function to pad coordinate transformation matrices
