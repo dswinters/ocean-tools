@@ -42,8 +42,8 @@ roty=@(d) [+cosd(d) 0 +sind(d) 0 ;
            -sind(d) 0 +cosd(d) 0 ;
            0        0        0 1];
 
-rotz=@(d) [+cosd(d) +sind(d) 0 0 ;
-           -sind(d) +cosd(d) 0 0 ;
+rotz=@(d) [+cosd(d) -sind(d) 0 0 ;
+           +sind(d) +cosd(d) 0 0 ;
                   0        0 1 0 ;
                   0        0 0 1];
 
@@ -62,8 +62,9 @@ b2i = [c*a -c*a  0     0  ;
 % getPitch = atand(tand(A.pitch(t)).*cosd(A.roll(t))); 
 % From beam2earth_workhorse.m:
 getPitch =@(t) asind(sp(t)*cr(t) / sqrt(1 - (sp(t)*sr(t))^2));
-i2s =@(t) rotz(h0) * rotx(getPitch(t)) * roty(A.roll(t));
-s2e =@(t) rotz(A.heading(t));
+i2s =@(t) rotz(-h0) * rotx(getPitch(t)) * roty(A.roll(t));
+s2e =@(t) rotz(-A.heading(t));
+% i2e =@(t) rotz(A.heading(t) - h0) * rotx(getPitch(t)) * roty(A.roll(t));
 
 %% Bin mapping
 % Beam depth scale factors (tilted->flat)
@@ -71,7 +72,8 @@ os = 2*[isConvex; ~isConvex; isUp&isConvex; ~(isUp&isConvex)]-1;
 m12 = @(t) [-sr(t)*cp(t)*[1;1]; 
             sp(t)*[1;1]]; 
 m3  = @(t) cp(t).*cr(t);
-sd  = @(t) [cb ./ (m3(t)*cb + os.*m12(t).*sb)];
+sd  = @(t) [cb ./ (m3(t).*cb + os.*m12(t).*sb)];
+
 % get bin numbers for each depth cell per beam
 binmap =@(t) fix(sd(t)*[1:ncells]+0.5);
 % extract bin_mapped beam velocities from raw beam velocities
@@ -99,16 +101,17 @@ for t = 1:length(A.mtime)
     vb = vb_bm(t,bm); % bin-mapped beam velocity
     vb(rmbin) = NaN; % remove invalid cells
 
-    %% Apply 3-beam solutions where only 1 beam is bad:
-    use_3beam = find(sum(isnan(vb))==1);
-    badbeam = nbeams+1 - sum(cumsum(isnan(vb(:,use_3beam))));
-    for i = 1:length(use_3beam)
-        vb(badbeam(i),use_3beam(i)) = ...
-            nansum(weights_3beam(badbeam(i)).*vb(:,use_3beam(i)));
-    end
+    % %% Apply 3-beam solutions where only 1 beam is bad:
+    % use_3beam = find(sum(isnan(vb))==1);
+    % badbeam = nbeams+1 - sum(cumsum(isnan(vb(:,use_3beam))));
+    % for i = 1:length(use_3beam)
+    %     vb(badbeam(i),use_3beam(i)) = ...
+    %         nansum(weights_3beam(badbeam(i)).*vb(:,use_3beam(i)));
+    % end
 
     %% Apply coordinate transformations
     ve = s2e(t)*i2s(t)*b2i*vb;
+    % ve = i2e(t)*b2i*vb;
     East(:,t) = ve(1,:);
     North(:,t) = ve(2,:);
     Vert(:,t) = ve(3,:);
@@ -117,6 +120,7 @@ for t = 1:length(A.mtime)
     if hasBT
         A.bt_vel(:,t) = ...
             1/1000*s2e(t)*i2s(t)*b2i*A.bt_vel(:,t);
+            % 1/1000*i2e(t)*b2i*A.bt_vel(:,t);
     end
 end
 
