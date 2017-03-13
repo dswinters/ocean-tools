@@ -25,6 +25,7 @@ sb = sind(A.config.beam_angle);
 h0 = A.config.xducer_misalign;
 
 %% Functions for getting rotation constants
+% (makes later code easier to read)
 % Internal tilt sensors don't directly measure pitch/roll
 st1 =@(t) sind(A.pitch(t)); % sin(tilt1)
 ct1 =@(t) cosd(A.pitch(t)); % cos(tilt1)
@@ -38,19 +39,21 @@ sr =@(t) sind(A.roll(t));   % sin(roll)
 cr =@(t) cosd(A.roll(t));   % cos(roll)
 
 %% Define some rotation functions
-% Add 4th dimension for error velocity
+% Rotate XYZ about X-axis
 %          X        Y        Z E
 rotx=@(d) [1        0        0 0 ; % X
            0 +cosd(d) -sind(d) 0 ; % Y
            0 +sind(d) +cosd(d) 0 ; % Z
            0        0        0 1]; % E
 
+% Rotate XYZ about Y-axis
 %          X        Y        Z E
 roty=@(d) [+cosd(d) 0 +sind(d) 0 ; % X
            0        1        0 0 ; % Y
            -sind(d) 0 +cosd(d) 0 ; % Z
            0        0        0 1]; % E
 
+% Rotate XYZ about Z-axis
 %          X        Y        Z E
 rotz=@(d) [+cosd(d) +sind(d) 0 0 ; % X
            -sind(d) +cosd(d) 0 0 ; % Y
@@ -58,6 +61,7 @@ rotz=@(d) [+cosd(d) +sind(d) 0 0 ; % X
                   0        0 0 1]; % E
 
 %% Instrument coordinate transformation
+% This depends on beam angle and beam configuration:
 c = 2*[isConvex; ~isConvex; isUp&isConvex; ~(isUp&isConvex)]-1;
 a = 1/(2*sb);
 b = 1/(4*cb);
@@ -78,7 +82,6 @@ m12 = @(t) [-sr(t)*cp(t)*[1;1];
             sp(t)*[1;1]]; 
 m3  = @(t) cp(t).*cr(t);
 sd  = @(t) [cb ./ (m3(t).*cb + c.*m12(t).*sb)];
-
 % Get bin numbers for each depth cell per beam:
 % (note: this might return invalid bins depending on pitch & roll)
 binmap =@(t) fix(sd(t)*[1:ncells]+0.5);
@@ -107,10 +110,6 @@ nbeam_bad =@(v,cells) nbeams+1 - sum(cumsum(isnan(v(:,cells))));
 %% Process
 % For each timestep, we will use the rotations defined previously
 % to transform data at all depths simultaneously.
-East = nan*A.east_vel;
-North = nan*A.north_vel;
-Vert = nan*A.vert_vel;
-Error = nan*A.error_vel;
 for t = 1:length(A.mtime)
 
     %% Get bin-mapped velocities
@@ -130,10 +129,10 @@ for t = 1:length(A.mtime)
     %% Apply coordinate transformations
     % to water velocity
     ve = i2e(t)*b2i*vb;
-    East(:,t) = ve(1,:);
-    North(:,t) = ve(2,:);
-    Vert(:,t) = ve(3,:);
-    Error(:,t) = ve(4,:);
+    A.east_vel (:,t) = ve(1,:);
+    A.north_vel(:,t) = ve(2,:);
+    A.vert_vel (:,t) = ve(3,:);
+    A.error_vel(:,t) = ve(4,:);
     % to bottom-track velocity
     if hasBT
         A.bt_vel(:,t) = ...
@@ -141,10 +140,6 @@ for t = 1:length(A.mtime)
     end
 end
 
-A.east_vel = East;
-A.north_vel = North;
-A.vert_vel = Vert;
-A.error_vel = Error;
 A.config.coord_sys = 'earth';
 A.config.bin_mapping = 'yes';
 A.config.use_3beam = 'yes';
