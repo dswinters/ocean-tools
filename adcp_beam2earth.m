@@ -39,60 +39,78 @@ cr =@(t) cosd(A.roll(t));   % cos(roll)
 
 %% Define some rotation functions
 % Add 4th dimension for error velocity
-rotx=@(d) [1        0        0 0 ;
-           0 +cosd(d) -sind(d) 0 ;
-           0 +sind(d) +cosd(d) 0 ;
-           0        0        0 1];
+%          X        Y        Z E
+rotx=@(d) [1        0        0 0 ; % X
+           0 +cosd(d) -sind(d) 0 ; % Y
+           0 +sind(d) +cosd(d) 0 ; % Z
+           0        0        0 1]; % E
 
-roty=@(d) [+cosd(d) 0 +sind(d) 0 ;
-           0        1        0 0 ;
-           -sind(d) 0 +cosd(d) 0 ;
-           0        0        0 1];
+%          X        Y        Z E
+roty=@(d) [+cosd(d) 0 +sind(d) 0 ; % X
+           0        1        0 0 ; % Y
+           -sind(d) 0 +cosd(d) 0 ; % Z
+           0        0        0 1]; % E
 
-rotz=@(d) [+cosd(d) +sind(d) 0 0 ;
-           -sind(d) +cosd(d) 0 0 ;
-                  0        0 1 0 ;
-                  0        0 0 1];
+%          X        Y        Z E
+rotz=@(d) [+cosd(d) +sind(d) 0 0 ; % X
+           -sind(d) +cosd(d) 0 0 ; % Y
+                  0        0 1 0 ; % Z
+                  0        0 0 1]; % E
 
 %% Instrument coordinate transformation
-c = 2*isConvex-1; % 1: convex; -1: concave
+c = 2*[isConvex; ~isConvex; isUp&isConvex; ~(isUp&isConvex)]-1;
 a = 1/(2*sb);
 b = 1/(4*cb);
-d = a/sqrt(2);
-b2i = [c*a -c*a  0     0  ;
-       0    0    -c*a  c*a;
-       b    b     b    b  ;
-       d    d    -d   -d  ];
+d = 1/(4*cb);
+%          v1     v2      v3     v4
+b2i = [c(1)*a c(2)*a       0      0 ; % X
+       0           0  c(3)*a c(4)*a ; % Y
+       b           b       b      b ; % Z
+       d           d      -d     -d]; % E
 
 %% Earth coordinate transformation
 i2e =@(t) rotz(A.heading(t) + h0) * rotx(getPitch(t)) * roty(A.roll(t));
 
 %% Bin mapping
 % Beam depth scale factors (tilted->flat)
-ori = 2*[isConvex; ~isConvex; isUp&isConvex; ~(isUp&isConvex)]-1;
+% These depend on pitch, roll, and beam configuration
 m12 = @(t) [-sr(t)*cp(t)*[1;1]; 
             sp(t)*[1;1]]; 
 m3  = @(t) cp(t).*cr(t);
-sd  = @(t) [cb ./ (m3(t).*cb + ori.*m12(t).*sb)];
+sd  = @(t) [cb ./ (m3(t).*cb + c.*m12(t).*sb)];
 
-% get bin numbers for each depth cell per beam
+% Get bin numbers for each depth cell per beam:
+% (note: this might return invalid bins depending on pitch & roll)
 binmap =@(t) fix(sd(t)*[1:ncells]+0.5);
-% extract bin_mapped beam velocities from raw beam velocities
+% Extract bin_mapped beam velocities from raw beam velocities:
+% (this assumes that the binmap has no invalid bins)
 vb_bm  =@(t,bm) [A.east_vel(bm(1,:),t)'  ;
                  A.north_vel(bm(2,:),t)' ;
                  A.vert_vel(bm(3,:),t)'  ;
                  A.error_vel(bm(4,:),t)'];
 
 %% 3-Beam solutions
+% 3-beam solutions are done by setting error velocity to 
+% zero and solving for the missing beam's velocity.
+% From the instrument coordinate transformation matrix we have:
+%             E = d(v1 + v2 - v3 - v4)
 err = [1;1;-1;-1];
+% Solve for the weights to use when beam b is bad:
+% (note: this gives weight 1 for beam b, which will be NaN)
 weights_3beam =@(b) -sign(err(b))*err;
+solve_3beam =@(v,b) nansum(v.*weights_3beam(b));
+% Identify deptch cells where this can be done:
+use_3beam =@(v) find(sum(isnan(v))==1);
+% Identify bad beams in 3-beam-ready depth cells:
+nbeam_bad =@(v,cells) nbeams+1 - sum(cumsum(isnan(v(:,cells))));
 
+%% Process
+% For each timestep, we will use the rotations defined previously
+% to transform data at all depths simultaneously.
 East = nan*A.east_vel;
 North = nan*A.north_vel;
 Vert = nan*A.vert_vel;
 Error = nan*A.error_vel;
-           
-%% Process
 for t = 1:length(A.mtime)
 
     %% Get bin-mapped velocities
@@ -103,11 +121,10 @@ for t = 1:length(A.mtime)
     vb(rmbin) = NaN; % remove invalid cells
 
     %% Apply 3-beam solutions where only 1 beam is bad:
-    use_3beam = find(sum(isnan(vb))==1);
-    badbeam = nbeams+1 - sum(cumsum(isnan(vb(:,use_3beam))));
-    for i = 1:length(use_3beam)
-        vb(badbeam(i),use_3beam(i)) = ...
-            nansum(weights_3beam(badbeam(i)).*vb(:,use_3beam(i)));
+    cidx = use_3beam(vb);
+    bidx = nbeam_bad(vb,cidx);
+    for i = 1:length(cidx)
+        vb(bidx(i),cidx(i)) = solve_3beam(vb(:,cidx(i)),bidx(i));
     end
 
     %% Apply coordinate transformations
