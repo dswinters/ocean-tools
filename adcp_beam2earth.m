@@ -39,20 +39,21 @@ sr =@(t) sind(A.roll(t));   % sin(roll)
 cr =@(t) cosd(A.roll(t));   % cos(roll)
 
 %% Define some rotation functions
+% Include 4th dimension for error velocity so that we
+% can use matrix products for beam->earth transformation
+%
 % Rotate XYZ about X-axis
 %          X        Y        Z E
 rotx=@(d) [1        0        0 0 ; % X
            0 +cosd(d) -sind(d) 0 ; % Y
            0 +sind(d) +cosd(d) 0 ; % Z
            0        0        0 1]; % E
-
 % Rotate XYZ about Y-axis
 %          X        Y        Z E
 roty=@(d) [+cosd(d) 0 +sind(d) 0 ; % X
            0        1        0 0 ; % Y
            -sind(d) 0 +cosd(d) 0 ; % Z
            0        0        0 1]; % E
-
 % Rotate XYZ about Z-axis
 %          X        Y        Z E
 rotz=@(d) [+cosd(d) +sind(d) 0 0 ; % X
@@ -87,25 +88,24 @@ sd  = @(t) [cb ./ (m3(t).*cb + c.*m12(t).*sb)];
 binmap =@(t) fix(sd(t)*[1:ncells]+0.5);
 % Extract bin_mapped beam velocities from raw beam velocities:
 % (this assumes that the binmap has no invalid bins)
-vb_bm  =@(t,bm) [A.east_vel(bm(1,:),t)'  ;
+vb_bm  =@(t,bm) [ A.east_vel(bm(1,:),t)' ;
                  A.north_vel(bm(2,:),t)' ;
-                 A.vert_vel(bm(3,:),t)'  ;
+                  A.vert_vel(bm(3,:),t)' ;
                  A.error_vel(bm(4,:),t)'];
 
 %% 3-Beam solutions
-% 3-beam solutions are done by setting error velocity to 
-% zero and solving for the missing beam's velocity.
-% From the instrument coordinate transformation matrix we have:
-%             E = d(v1 + v2 - v3 - v4)
-err = [1;1;-1;-1];
-% Solve for the weights to use when beam b is bad:
-% (note: this gives weight 1 for beam b, which will be NaN)
-weights_3beam =@(b) -sign(err(b))*err;
-solve_3beam =@(v,b) nansum(v.*weights_3beam(b));
-% Identify deptch cells where this can be done:
-use_3beam =@(v) find(sum(isnan(v))==1);
-% Identify bad beams in 3-beam-ready depth cells:
+% First, identify where we can use 3-beam solutions and which
+% beams need to be filled:
+use_3beam =@(v) find(sum(isnan(v))==1); % returns depth cells
 nbeam_bad =@(v,cells) nbeams+1 - sum(cumsum(isnan(v(:,cells))));
+% Set error velocity to zero and solve for missing beam's velocity:
+%   From the instrument coordinate transformation matrix we have:
+%               E = d(v1 + v2 - v3 - v4)
+%           =>  0 = +v1 +v2 -v3 -v4           (1)
+%   Put these weights in a vector:
+err = [1;1;-1;-1];
+% Solve equation (1) for beam b's new velocity:
+solve_3beam =@(v,b) nansum(v*-sign(err(b)).*err);
 
 %% Process
 % For each timestep, we will use the rotations defined previously
