@@ -114,26 +114,27 @@ Error = nan*A.error_vel;
 for t = 1:length(A.mtime)
 
     %% Get bin-mapped velocities
-    bm = binmap(t); % bin-map the depth cells (bin indices)
+    bm = binmap(t);           % bin-map the depth cells (bin indices)
     rmbin = bm<1 | bm>ncells; % invalid bins
-    bm(rmbin) = 1; % (use cell 1 as a placeholder for indexing)
-    vb = vb_bm(t,bm); % bin-mapped beam velocity
-    vb(rmbin) = NaN; % remove invalid cells
+    bm(rmbin) = 1;            % (use cell 1 as a placeholder for indexing)
+    vb = vb_bm(t,bm);         % bin-mapped beam velocity
+    vb(rmbin) = NaN;          % remove invalid cells
 
     %% Apply 3-beam solutions where only 1 beam is bad:
-    cidx = use_3beam(vb);
-    bidx = nbeam_bad(vb,cidx);
+    cidx = use_3beam(vb);      % indices of cells where a 3beam solution is valid
+    bidx = nbeam_bad(vb,cidx); % indices of bad beams in these cells
     for i = 1:length(cidx)
         vb(bidx(i),cidx(i)) = solve_3beam(vb(:,cidx(i)),bidx(i));
     end
 
     %% Apply coordinate transformations
+    % to water velocity
     ve = i2e(t)*b2i*vb;
     East(:,t) = ve(1,:);
     North(:,t) = ve(2,:);
     Vert(:,t) = ve(3,:);
     Error(:,t) = ve(4,:);
-
+    % to bottom-track velocity
     if hasBT
         A.bt_vel(:,t) = ...
             1/1000*i2e(t)*b2i*A.bt_vel(:,t);
