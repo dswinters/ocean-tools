@@ -68,7 +68,8 @@ for t = 1:length(A.mtime)
     if A.config.n_cells > 1;
         cells = 1:A.config.n_cells;
         cellidx = fix(feval(ds,t)*cells+0.5);
-    else
+    else % Sometimes I make a fake adcp structure with 1
+         % depth cell to convert BT velocities to earth coords
         cellidx = [1;1;1;1];
     end
     rmcell = cellidx<1 | cellidx>A.config.n_cells;
