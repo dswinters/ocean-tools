@@ -119,6 +119,6 @@ A.file         = A.file(:,kp);
 % Include which files were read
 A.files = cell(length(fn),1);
 for i = 1:length(fn)
-    [fdir fname fext] = fileparts(fn{i})
+    [fdir fname fext] = fileparts(fn{i});
     A.files{i} = [fname fext];
 end
