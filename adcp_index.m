@@ -36,3 +36,10 @@ A.bt_corr      = A.bt_corr(:,idx);
 A.bt_ampl      = A.bt_ampl(:,idx);
 A.bt_perc_good = A.bt_perc_good(:,idx);
 A.perc_good    = A.perc_good(:,:,idx);
+
+if isfield(A,'file')
+    A.file = A.file(:,idx);
+end
+if isfield(A,'mtime_raw')
+    A.mtime_raw = A.mtime_raw(:,idx);
+end
