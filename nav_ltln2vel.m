@@ -28,16 +28,17 @@ ln = ln(idx);
 
 % convert to xy (need at least 2 non-nan points)
 if sum(idx)>2
+    wgs84 = referenceEllipsoid('wgs84','m');
     lt0 = nanmean(lt);
     ln0 = nanmean(ln);
-    scl  = abs(40000000/360) ;   % meters N/S per degree N
-    scl2 = scl*cosd(lt0) ;  % meters E/W per degree W at latitude lt0
-                            %
-    y =  scl  * (lt-lt0) ;    % meters N/S
-    x =  scl2 * (ln-ln0) ;    % meters E/W
-                              %
+    lt2y = distance('rh',lt0-0.5,ln0,lt0+0.5,ln0,wgs84);
+    ln2x = distance('rh',lt0,ln0-0.5,lt0,ln0+0.5,wgs84);
+    % lt2y = abs(40000000/360) ;   % meters N/S per degree N
+    % ln2x = scl*cosd(lt0)     ;   % meters E/W per degree W at latitude lt0
+    y  =  lt2y * (lt-lt0) ;    % meters N/S
+    x  =  ln2x * (ln-ln0) ;    % meters E/W
     dt = diff(dn)*86400;
-    t = dn(1:end-1)/2 + dn(2:end)/2;
+    t  = dn(1:end-1) + diff(dn)/2;
     vx = interp1(t, diff(x)./dt, dn0);
     vy = interp1(t, diff(y)./dt, dn0);
 else
