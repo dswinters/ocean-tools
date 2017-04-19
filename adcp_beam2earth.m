@@ -31,8 +31,8 @@ st1 =@(t) sind(A.pitch(t)); % sin(tilt1)
 ct1 =@(t) cosd(A.pitch(t)); % cos(tilt1)
 st2 =@(t) sind(A.roll(t));  % sin(tilt2)
 ct2 =@(t) cosd(A.roll(t));  % cos(tilt2)
-% This is how we convert tilt1&tilt2 into pitch:
-getPitch =@(t) asind(st1(t)*ct2(t) / sqrt(1 - (st1(t)*st2(t))^2));
+% Convert tilt1&tilt2 into pitch:
+getPitch =@(t) atand(tand(A.pitch(t)).*ct2(t));
 sp =@(t) sind(getPitch(t)); % sin(pitch)
 cp =@(t) cosd(getPitch(t)); % cos(pitch)
 sr =@(t) sind(A.roll(t));   % sin(roll)
@@ -67,11 +67,11 @@ c = 2*[isConvex; ~isConvex; isUp&isConvex; ~(isUp&isConvex)]-1;
 a = 1/(2*sb);
 b = 1/(4*cb);
 d = 1/(4*cb);
-%          v1     v2      v3     v4
-b2i = [c(1)*a c(2)*a       0      0 ; % X
-       0           0  c(3)*a c(4)*a ; % Y
-       b           b       b      b ; % Z
-       d           d      -d     -d]; % E
+%          v1      v2      v3     v4
+b2i = [c(1)*a  c(2)*a       0      0 ; % X
+       0            0  c(3)*a c(4)*a ; % Y
+       b            b       b      b ; % Z
+       d            d      -d     -d]; % E
 
 %% Earth coordinate transformation
 i2e =@(t) rotz(A.heading(t) + h0) * rotx(getPitch(t)) * roty(A.roll(t));
@@ -79,25 +79,37 @@ i2e =@(t) rotz(A.heading(t) + h0) * rotx(getPitch(t)) * roty(A.roll(t));
 %% Bin mapping
 % Beam depth scale factors (tilted->flat)
 % These depend on pitch, roll, and beam configuration
-m12 = @(t) [-sr(t)*cp(t)*[1;1]; 
-            sp(t)*[1;1]]; 
-m3  = @(t) cp(t).*cr(t);
-sd  = @(t) [cb ./ (m3(t).*cb + c.*m12(t).*sb)];
+% m12 = @(t) [-sr(t)*cp(t)*[1;1]; 
+%             sp(t)*[1;1]]; 
+% m3  = @(t) cp(t).*cr(t);
+% sd  = @(t) [cb ./ (m3(t).*cb + c.*m12(t).*sb)];
+m1 =@(t) -sr(t)*cp(t);
+m2 =@(t) sp(t);
+m3 =@(t) cp(t)*cr(t);
+sd =@(t) [cb/(m3(t)*cb + c(1)*m1(t)*sb);
+          cb/(m3(t)*cb + c(2)*m1(t)*sb);
+          cb/(m3(t)*cb + c(3)*m2(t)*sb);
+          cb/(m3(t)*cb + c(4)*m2(t)*sb)];
+    
 % Get bin numbers for each depth cell per beam:
 % (note: this might return invalid bins depending on pitch & roll)
 binmap =@(t) fix(sd(t)*[1:ncells]+0.5);
-% Extract bin_mapped beam velocities from raw beam velocities:
+% Extract bin-mapped beam velocities from raw beam velocities:
 % (this assumes that the binmap has no invalid bins)
-vb_bm  =@(t,bm) [ A.east_vel(bm(1,:),t)' ;
-                 A.north_vel(bm(2,:),t)' ;
-                  A.vert_vel(bm(3,:),t)' ;
-                 A.error_vel(bm(4,:),t)'];
+% vb_bm  =@(t,bm) [ A.east_vel(bm(1,:),t)' ;
+%                  A.north_vel(bm(2,:),t)' ;
+%                   A.vert_vel(bm(3,:),t)' ;
+%                  A.error_vel(bm(4,:),t)'];
+vb_bm  =@(t,bm) [A.vel(bm(1,:),1,t)' ;
+                 A.vel(bm(2,:),2,t)' ;
+                 A.vel(bm(3,:),3,t)' ;
+                 A.vel(bm(4,:),4,t)'];
 
 %% 3-Beam solutions
 % First, identify where we can use 3-beam solutions and which
 % beams need to be filled:
 use_3beam =@(v) find(sum(isnan(v))==1); % returns depth cells
-nbeam_bad =@(v,cells) nbeams+1 - sum(cumsum(isnan(v(:,cells))));
+nbeam_bad =@(v,cells) size(v,1)+1 - sum(cumsum(isnan(v(:,cells))));
 % Set error velocity to zero and solve for missing beam's velocity:
 %   From the instrument coordinate transformation matrix we have:
 %               E = d(v1 + v2 - v3 - v4)
@@ -129,15 +141,17 @@ for t = 1:length(A.mtime)
     %% Apply coordinate transformations
     % to water velocity
     ve = i2e(t)*b2i*vb;
-    A.east_vel (:,t) = ve(1,:);
-    A.north_vel(:,t) = ve(2,:);
-    A.vert_vel (:,t) = ve(3,:);
-    A.error_vel(:,t) = ve(4,:);
+    A.vel(:,1,t) = ve(1,:);
+    A.vel(:,2,t) = ve(2,:);
+    A.vel(:,3,t) = ve(3,:);
+    A.vel(:,4,t) = ve(4,:);
+    % A.east_vel (:,t) = ve(1,:);
+    % A.north_vel(:,t) = ve(2,:);
+    % A.vert_vel (:,t) = ve(3,:);
+    % A.error_vel(:,t) = ve(4,:);
     % to bottom-track velocity
-    if hasBT
-        A.bt_vel(:,t) = ...
-            1/1000*i2e(t)*b2i*A.bt_vel(:,t);
-    end
+    A.bt_vel(1:4,t) = ...
+        1/1000*i2e(t)*b2i*A.bt_vel(1:4,t);
 end
 
 A.config.coord_sys = 'earth';
