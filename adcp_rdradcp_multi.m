@@ -7,14 +7,15 @@
 % Author: Dylan Winters
 % Created: August 10 2016
 
-function A = adcp_rdradcp_multi(fn,skip)
+function A = adcp_rdradcp_multi(fn,varargin)
 
+navg = 1;
 A = [];
 ng = 0;
 for i = 1:length(fn)
     adcp = [];
     try
-        adcp = rdradcp(fn{i},skip,-1);
+        adcp = rdradcp(fn{i},navg,-1);
         adcp.file = 0*adcp.mtime + i;
         ng = ng+1;
     catch err
@@ -122,3 +123,9 @@ for i = 1:length(fn)
     [fdir fname fext] = fileparts(fn{i});
     A.files{i} = [fname fext];
 end
+
+bnames = {'east','north','vert','error'};
+for i = 1:length(bnames)
+    A.vel(:,i,:) = A.([bnames{i} '_vel']);
+end
+
