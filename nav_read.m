@@ -6,6 +6,12 @@
 % Convert textual NMEA data from 1 or more files into a MATLAB data
 % struct.
 %
+% EXAMPLES:
+%   1) Read GPGGA data from file1.n1r:
+%      nav = nav_read({'file1.n1r'},{'GPGGA'})
+%   2) Read GPGGA and HEHDT data from file1.n1r and file2.n1r
+%      nav = nav_read({'file1.n1r','file2.n1r'},{'GPGGA','HEHDT'})
+%
 % INPUTS: f_in (cell array), nmea_types (cell array).
 % F_IN contains full paths to files containing navigational
 % data. NMEA_TYPES contains the prefixes for nmea strings to be read
@@ -22,16 +28,18 @@
 
 function NAV = nav_read(f_in,nmea_types)
 
-%% Regexps for parsing each type of line
-%
-% First define some templates for different types of data we might see:
+% The bulk of the text parsing is done using MATLAB's regexp function.
+% First, create some regexps for types of data we might see in the text.
+% The portions enclosed in parentheses will be extracted, while the rest
+% is just used for matching. The regexp ',?' means that there might be a comma.
 dec  = ',?(-?\d+\.\d+),?'; % positive or negative float w/ decimal places, maybe comma-enclosed
 int  =@(n) sprintf(',?(-?\\d{%d}),?',n); % n-digit positive or negative integer, maybe comma-enclosed
 intu = ',?(\d+),?'; % integer of unknown length, maybe comma-enclosed
 ltr  = ',?[a-zA-Z],?'; % any letter, maybe comma-enclosed
-EW   = ',?([EW]),?'; % 'E' or 'W', maybe comma-enclosed
+EW   = ',?([ewEW]),?'; % 'E' or 'W', maybe comma-enclosed
 
-% These expressions tell MATLAB how to extract fields from each NMEA string
+% Combine the above regexps for single chunks of data into regexps
+% for different types of complete NMEA strings:
 fmt = struct();
 fmt.HEHDT = ['\$HEHDT,' dec];
 fmt.HEROT = ['\$HEROT,' dec];
@@ -109,7 +117,6 @@ flds = struct(...
         'num',   @(D) D(:,1)                                 ,...
         'dn',    @(D) datenum(D(:,[2:7])) - D(:,8)/86400));
 
-
 %% Initialize output structure
 NAV = struct();
 for i = 1:length(nmea_types)
@@ -145,7 +152,8 @@ for fi = 1:length(f_in)
             D = reshape(sscanf(sprintf('%s*',lines{:}),'%f*'),size(lines));
             %
             vars = fields(flds.(prefix));
-            % Grab line numbers first
+            % Grab line numbers by counting occurences of newline characters before
+            % the start of each line:
             lnum = nan(size(D,1),1);
             lnum(1) = 1 + length(regexp(ftxt(1:start(1)),'\n'));
             for l = 2:length(lnum)
