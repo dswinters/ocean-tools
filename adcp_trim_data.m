@@ -17,16 +17,16 @@
 function [adcp] = adcp_trim_data(adcp,trim_methods)
 
 if ~isfield(adcp,'info');
-    adcp.info = {};
+    [adcp(:).info] = deal({});
 end
 
-bnames = {'east','north','vert','error'};
 for i = 1:length(trim_methods)
     mes = 'Data removed ';
     switch trim_methods(i).name
       %% Do nothing
       case 'none'
         return
+
       %% Remove data below a percentage of bottom-track depth
       case 'BT'
         % Make sure the BT parameter is given as a percentage
@@ -37,21 +37,26 @@ for i = 1:length(trim_methods)
             pct=100*pct;
         end
         mes = [mes sprintf('below %.2f%% of bottom-track depth',pct)];
-        for ib = 1:4;
+        [bd2 d2] = meshgrid(bd,adcp.config.ranges);
+        for ib = 1:adcp.config.n_beams;
             bd = adcp.bt_range(ib,:);
             bd(bd<5) = inf; % don't trust very shallow BT depths
-            [bd2 d2] = meshgrid(bd,adcp.config.ranges);
-            adcp.([bnames{ib} '_vel'])(d2>pct/100*bd2) = NaN;
+            mask = d2>pct/100*bd2;
+            vb = squeeze(adcp.vel(:,ib,:));
+            vb(mask) = NaN;
+            adcp.vel(:,ib,:) = vb;
         end
         adcp.info = cat(1,adcp.info,mes);
 
       %% Remove data using echo intensity edge-detection
       case 'ei_edge'
-        mes = [mes 'using echo intensity edge detection'];
-        for ib = 1:4
+        mes = [mes 'using beam-specific echo intensity edge detection'];
+        for ib = 1:adcp.config.n_beams
             edges = edge(squeeze(adcp.intens(:,ib,:)),'Sobel','horizontal');
-            bt_mask = (cumsum(edges) > 0);
-            adcp.([bnames{ib} '_vel'])(bt_mask) = NaN;
+            mask = (cumsum(edges) > 0);
+            vb = squeeze(adcp.vel(:,ib,:));
+            vb(mask) = NaN;
+            adcp.vel(:,ib,:) = vb;
         end
         adcp.info = cat(1,adcp.info,mes);
 
@@ -60,29 +65,34 @@ for i = 1:length(trim_methods)
         switch trim_methods(i).params
           case 'beam'
             mes = [mes 'using beam-specific correlation edge detection'];
-            for ib = 1:4
+            for ib = 1:adcp.config.n_beams
                 edges = edge(squeeze(adcp.corr(:,ib,:)),'Sobel','horizontal');
-                bt_mask = (cumsum(edges) > 0);
-                adcp.([bnames{ib} '_vel'])(bt_mask) = NaN;
+                mask = (cumsum(edges) > 0);
+                vb = squeeze(adcp.vel(:,ib,:));
+                vb(mask) = NaN;
+                adcp.vel(:,ib,:) = vb;
             end
-            adcp.info = cat(1,adcp.info,mes);
           case 'avg'
             mes = [mes 'using beam-averaged correlation edge detection'];
             edges = edge(squeeze(nanmean(adcp.corr,2)),'Sobel','horizontal');
-            bt_mask = (cumsum(edges) > 0);
-            for ib = 1:4
-                adcp.([bnames{ib} '_vel'])(bt_mask) = NaN;                        
+            mask = (cumsum(edges) > 0);
+            for ib = 1:adcp.config.n_beams
+                vb = squeeze(adcp.vel(:,ib,:));
+                vb(mask) = NaN;
+                adcp.vel(:,ib,:) = vb;
             end
         end
         adcp.info = cat(1,adcp.info,mes);
 
-      %% Remove data below cutoff
+      %% Remove data below cutoff depth
       case 'cutoff'
         cutoff = trim_methods(i).params;
-        mask = false(size(adcp.east_vel));
+        mask = false(adcp.config.n_beams,length(adcp.mtime));
         mask(adcp.config.ranges > cutoff,:) = true;
-        for ib=1:4
-            adcp.([bnames{ib} '_vel'])(mask) = NaN;
+        for ib=1:adcp.config.n_beams
+            vb = squeeze(adcp.vel(:,ib,:));
+            vb(mask) = NaN;
+            adcp.vel(:,ib,:) = vb;
         end
         mes = [mes sprintf('below %.2fm depth',cutoff)];
         adcp.info = cat(1,adcp.info,mes);
