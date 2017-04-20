@@ -343,9 +343,10 @@ for j = 2:length(header.ids)
         offset                 = header.offsets(j) + 1;
         bt                     = double(ensdata(offset:offset+44));
         adcp(pr).bt_range(:,i)     = intcat(...
-                                        [bt(17:2:23),bt(18:2:24)],8);
-        adcp(pr).bt_vel(:,i)       = intcat(...
+                                        [bt(17:2:23),bt(18:2:24)],8)/100;
+        btvel                      = intcat(...
                                         [bt(25:2:31),bt(26:2:32)],8);
+        adcp(pr).bt_vel(:,i)       = uint2int(btvel,16)/1000;
         adcp(pr).bt_corr(:,i)      = bt(33:36);
         adcp(pr).bt_ampl(:,i)      = bt(37:40);
         adcp(pr).bt_perc_good(:,i) = bt(41:44);

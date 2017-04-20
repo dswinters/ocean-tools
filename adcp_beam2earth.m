@@ -150,8 +150,7 @@ for t = 1:length(A.mtime)
     % A.vert_vel (:,t) = ve(3,:);
     % A.error_vel(:,t) = ve(4,:);
     % to bottom-track velocity
-    A.bt_vel(1:4,t) = ...
-        1/1000*i2e(t)*b2i*A.bt_vel(1:4,t);
+    A.bt_vel(1:4,t) = i2e(t)*b2i*A.bt_vel(1:4,t);
 end
 
 A.config.coord_sys = 'earth';
