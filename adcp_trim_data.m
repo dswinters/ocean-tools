@@ -37,9 +37,9 @@ for i = 1:length(trim_methods)
             pct=100*pct;
         end
         mes = [mes sprintf('below %.2f%% of bottom-track depth',pct)];
-        [bd2 d2] = meshgrid(bd,adcp.config.ranges);
         for ib = 1:adcp.config.n_beams;
             bd = adcp.bt_range(ib,:);
+            [bd2 d2] = meshgrid(bd,adcp.config.ranges);
             bd(bd<5) = inf; % don't trust very shallow BT depths
             mask = d2>pct/100*bd2;
             vb = squeeze(adcp.vel(:,ib,:));
