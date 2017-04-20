@@ -124,8 +124,11 @@ for i = 1:length(fn)
     A.files{i} = [fname fext];
 end
 
+% Rename some fields
 bnames = {'east','north','vert','error'};
 for i = 1:length(bnames)
-    A.vel(:,i,:) = A.([bnames{i} '_vel']);
+    vname = [bnames{i} '_vel'];
+    A.vel(:,i,:) = A.(vname);
+    A = rmfield(A,vname);
 end
 
