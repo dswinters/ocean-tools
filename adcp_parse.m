@@ -95,13 +95,13 @@ if length(h)==0
     error('No headers found!')
 end
 
-% Remove invalid header start indices
 if h(end)+2 > length(dat)
     h = h(1:end-1);
 end
 nbytes = intcat([dat(h+2+rb),...
                  dat(h+3+rb)],8) + rb;
 
+% Remove headers that appear mid-ensemble
 i = 1;
 while i<length(h)
     if h(i+1) < h(i)+nbytes(i)+2;
@@ -112,11 +112,20 @@ while i<length(h)
     end
 end
 
+% Remove incomplete ensemble at end
 if h(end) + nbytes(end) > length(dat)
     h = h(1:end-1);
     nbytes = nbytes(1:end-1);
 end
 
+% Remove ensembles with anomalous byte counts
+[counts,unb] = hist(nbytes,unique(nbytes));
+for i = 1:length(unb)
+    if counts(i)/length(nbytes) < 0.1;
+        h = h(nbytes~=unb(i));
+        nbytes = nbytes(nbytes~=unb(i));
+    end
+end
 
 %----------------------------------------------------------
 % Initialize adcp data structure
@@ -168,9 +177,7 @@ end
 % Return header information from the given ensemble.
 %----------------------------------------------------------
 function header = get_header(ensdata,setup)
-
 rb = setup.ross_bytes;
-
 header.nbytes = intcat(ensdata((3:4)+rb)',8) + rb;
 header.ndat = ensdata(6+rb);
 header.offsets = rb + ...
@@ -243,10 +250,8 @@ config.ranges = config.bin1_dist + ...
 % the given ensemble data.
 %----------------------------------------------------------
 function [adcp aidx] = get_data(adcp,ensdata,aidx,setup)
-
 header = get_header(ensdata,setup);
 config = get_fixed_leader(ensdata,setup);
-
 pr = match_profile(config,adcp);
 
 
