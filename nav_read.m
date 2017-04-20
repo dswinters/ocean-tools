@@ -140,15 +140,15 @@ for fi = 1:length(f_in)
         [lines, start] = regexp(ftxt,fmt.(prefix),'tokens','start');
         lines = cat(1,lines{:});
 
-        % Apply substitution filters
-        if isfield(filts,prefix)
-            for iflt = 1:length(filts.(prefix))
-                lines(strcmp(lines,filts.(prefix)(iflt).str)) = ...
-                    {filts.(prefix)(iflt).sub};
-            end
-        end
-
         if ~isempty(lines)
+            % Apply substitution filters
+            if isfield(filts,prefix)
+                for iflt = 1:length(filts.(prefix))
+                    lines(strcmp(lines,filts.(prefix)(iflt).str)) = ...
+                        {filts.(prefix)(iflt).sub};
+                end
+            end
+
             D = reshape(sscanf(sprintf('%s*',lines{:}),'%f*'),size(lines));
             %
             vars = fields(flds.(prefix));
