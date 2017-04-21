@@ -17,6 +17,7 @@ end
 
 dat = load_data(files);               % load all data
 [h nbytes] = find_headers(dat,setup); % find header locations
+
 setup.nens = length(h);
 adcp = [];                            % initialize ADCP structure
 aidx = [];
@@ -92,7 +93,9 @@ rb = setup.ross_bytes;
 h = find(dat(1:end-1)==127 & dat(2:end)==127);
 
 if length(h)==0
-    error('No headers found!')
+    warning('No headers found!')
+    nbytes = [];
+    return
 end
 
 if h(end)+2 > length(dat)
@@ -112,18 +115,29 @@ while i<length(h)
     end
 end
 
-% Remove incomplete ensemble at end
-if h(end) + nbytes(end) > length(dat)
-    h = h(1:end-1);
-    nbytes = nbytes(1:end-1);
-end
-
 % Remove ensembles with anomalous byte counts
 [counts,unb] = hist(nbytes,unique(nbytes));
 for i = 1:length(unb)
     if counts(i)/length(nbytes) < 0.1;
         h = h(nbytes~=unb(i));
         nbytes = nbytes(nbytes~=unb(i));
+    end
+end
+
+% Remove incomplete ensemble at end
+if h(end) + nbytes(end) > length(dat)
+    h = h(1:end-1);
+    nbytes = nbytes(1:end-1);
+end
+
+% Remove remaining headers that appear mid-ensemble
+i = 1;
+while i<length(h)
+    if h(i+1) < h(i)+nbytes(i)+2;
+        h(i+1) = [];
+        nbytes(i+1) = [];
+    else
+        i = i + 1;
     end
 end
 
@@ -279,15 +293,27 @@ i = aidx(pr);
 nc = adcp(pr).config.n_cells;
 nb = adcp(pr).config.n_beams;
 
+known_ids = [0 128 256 512 768 1024 1280 1536 2560 3072];
+ids_known = ismember(header.ids,known_ids);
+if any(~ids_known)
+    fprintf('\r')
+    for i = 1:length(header.ids)
+        if ~ids_known(i)
+            fprintf('Unknown ID: %d\n',header.ids(i))
+        end
+    end
+    fprintf('Ensemble skipped!\n')
+    return
+end
 for j = 2:length(header.ids)
     switch header.ids(j)
 
       case 128 % variable leader
         % Get ROSS timestamp with variable leader
-        if isfield(adcp(pr).config,'ROSS') & adcp(pr).config.ROSS
-            adcp(pr).ross_mtime = datenum(...
-                double(ensdata(2 + [1:6])) + ...
-                [2000 0 0 0 0 ensdata(2+7)]'/100);
+        if setup.ross_bytes > 0
+            adcp(pr).ross_mtime(i) = datenum(...
+                double(ensdata(2 + [1:6]))' + ...
+                [2000 0 0 0 0 ensdata(2+7)/100]);
         end
         %
         offset = header.offsets(j) + 1;
