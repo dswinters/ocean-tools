@@ -69,7 +69,7 @@ fmt.PADCP = ['\$PADCP,' intu ...
 
 %% NMEA prefix-specific substitution filters
 % Replace 'E' and 'W' in GPRMC/GPGGA matrices with '1' and '-1'
-ewflt = struct('str',{'E','W'},'sub',{'1','-1'});
+ewflt = struct('str',{'E','W','e','w'},'sub',{'1','-1','1','-1'});
 filts = struct(...
     'GPRMC', ewflt,...
     'GPGGA', ewflt);
@@ -148,7 +148,6 @@ for fi = 1:length(f_in)
                         {filts.(prefix)(iflt).sub};
                 end
             end
-
             D = reshape(sscanf(sprintf('%s*',lines{:}),'%f*'),size(lines));
             %
             vars = fields(flds.(prefix));
