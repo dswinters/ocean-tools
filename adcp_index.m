@@ -12,7 +12,7 @@
 
 function A = adcp_index(A,idx)
 
-flds = setdiff(fields(A),{'config','files','info'});
+flds = setdiff(fields(A),{'config','files','info','masks','field_info','gps'});
 for i = 1:length(flds)
     nd = ndims(A.(flds{i}));
     if nd == 2 & ~isstr(A.(flds{i}));
