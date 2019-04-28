@@ -13,10 +13,15 @@ setup.nprofs = 1;
 setup.ross_bytes = 0;
 if ismember('ross',lower(varargin))
     setup.ross_bytes = 7;
+    if ismember('pre',lower(varargin))
+        setup.ross_tloc = -1;
+    elseif ismember('post',lower(varargin))
+        setup.ross_tloc = 1;
+    end
 end
 
 dat = load_data(files);               % load all data
-[h nbytes] = find_headers(dat,setup); % find header locations
+[h nbytes dat setup] = find_headers(dat,setup); % find header locations
 
 setup.nens = length(h);
 adcp = [];                            % initialize ADCP structure
@@ -29,17 +34,29 @@ disp('Parsing')
 while hidx < length(h);
     ensidx = h(hidx) + [0:nbytes(hidx)-1]; % Compute indices of ensemble data
     ensdata = double(dat(ensidx));              % Extract ensemble data
-    [adcp aidx] = get_data(adcp,ensdata,aidx,setup); % Fill adcp structure with data
+    [adcp aidx pr pidx] = get_data(adcp,ensdata,aidx,setup); % Fill adcp structure with data
+    % Handle additional ROSS data written before ensemble
+    if setup.ross_bytes > 0
+        adcp(pr).ross_mtime(pidx) = setup.ross_dn(hidx);
+    end
     hidx = hidx + 1;
     print_progress(hidx,length(h),0);
 end
 
 
-%% Remove empty ensembles
+%% Remove empty ensembles, maybe overwrite timestamps
 for i = 1:length(adcp)
+    if setup.ross_bytes > 0
+        adcp(i).mtime_raw = adcp(i).mtime;
+        adcp(i).mtime = adcp(i).ross_mtime;
+    end
     adcp(i) = rm_ens(adcp(i),isnan(adcp(i).mtime));
 end
 
+if setup.ross_bytes > 0
+    adcp = rmfield(adcp,'ross_mtime');
+end
+    
 
 %%% Sub-functions
 
@@ -87,9 +104,8 @@ n(n>m) = -2*m + n(n>m);
 %----------------------------------------------------------
 % Find all header start indices in raw data
 %----------------------------------------------------------
-function [h nbytes] = find_headers(dat,setup)
+function [h nbytes dat setup] = find_headers(dat,setup)
 
-rb = setup.ross_bytes;
 h = find(dat(1:end-1)==127 & dat(2:end)==127);
 
 if length(h)==0
@@ -98,47 +114,79 @@ if length(h)==0
     return
 end
 
-if h(end)+2 > length(dat)
-    h = h(1:end-1);
-end
-nbytes = intcat([dat(h+2+rb),...
-                 dat(h+3+rb)],8) + rb;
 
-% Remove headers that appear mid-ensemble
-i = 1;
-while i<length(h)
-    if h(i+1) < h(i)+nbytes(i)+2;
-        h(i+1) = [];
-        nbytes(i+1) = [];
-    else
-        i = i + 1;
+
+% % Make sure we can read nbytes of last header
+% if h(end)+2+setup.ross_bytes > length(dat)
+%     h = h(1:end-1);
+% end
+
+% For a sequence [127 127 127], only count the first pair as a header
+rm = false(size(h));
+rm([false;diff(h)==1]) = true;
+
+if setup.ross_bytes > 0
+
+    % For a sequence [127 127 127], only remove data preceeding the first pair
+    ig_ross = [false; diff(h)==1];
+    % Get indices of all ROSS data
+    if setup.ross_tloc == 1
+        [ridx,h2] = meshgrid(1+[1:(setup.ross_bytes)],h-ig_ross);
+    elseif setup.ross_tloc == -1
+        [ridx,h2] = meshgrid([-setup.ross_bytes:-1],h-ig_ross);
     end
+    ridx = ridx + h2; clear h2;
+    % Extract ROSS data
+    rdata = double(dat(ridx));
+    % Check for extra 127s written to pre-header timestamps
+    idx = rdata(:,end) == 127;
+    ridx(idx,:) = ridx(idx,:)-1;
+    rdata = double(dat(ridx));
+    % Convert timestamps to datenum format
+    rdata(:,6) = rdata(:,6) + rdata(:,7)/100;
+    rdata(:,1) + rdata(:,1) + 2000;
+    rdata = rdata(:,1:6);
+    dn = datenum(rdata);
+    % Remove ROSS data
+    dat = dat(setdiff([1:length(dat)]',ridx(:)));
+    % Correct header positions
+    h = h - setup.ross_bytes*cumsum(~ig_ross);
+    % Sometimes an extra 127 is added after ROSS data...
+    % make sure we're not counting these.
+    if h(end)+2+setup.ross_bytes > length(dat)
+        rm(end) = true;
+    end
+    h(rm) = [];
+    dn(rm) = [];
 end
 
+% Get nbytes for each header
+nbytes = intcat([dat(h+2),...
+                 dat(h+3)],8);
+
+% Start filtering headers
+kp = true(size(h));
 % Remove ensembles with anomalous byte counts
+% This is a little sloppy... I only keep ensembles
+% if at least 10% of ensembles have the same number
+% of bytes.
 [counts,unb] = hist(nbytes,unique(nbytes));
 for i = 1:length(unb)
     if counts(i)/length(nbytes) < 0.1;
-        h = h(nbytes~=unb(i));
-        nbytes = nbytes(nbytes~=unb(i));
+        kp(nbytes==unb(i)) = false;
     end
 end
-
+% Remove headers that appear mid-ensemble
+kp (h(2:end) < (h(1:end-1) + nbytes(1:end-1) + 2)) = false;
 % Remove incomplete ensemble at end
 if h(end) + nbytes(end) > length(dat)
-    h = h(1:end-1);
-    nbytes = nbytes(1:end-1);
+    kp(end) = false;
 end
 
-% Remove remaining headers that appear mid-ensemble
-i = 1;
-while i<length(h)
-    if h(i+1) < h(i)+nbytes(i)+2;
-        h(i+1) = [];
-        nbytes(i+1) = [];
-    else
-        i = i + 1;
-    end
+h = h(kp);
+nbytes = nbytes(kp);
+if setup.ross_bytes>0
+    setup.ross_dn = dn(kp);
 end
 
 %----------------------------------------------------------
@@ -191,12 +239,11 @@ end
 % Return header information from the given ensemble.
 %----------------------------------------------------------
 function header = get_header(ensdata,setup)
-rb = setup.ross_bytes;
-header.nbytes = intcat(ensdata((3:4)+rb)',8) + rb;
-header.ndat = ensdata(6+rb);
-header.offsets = rb + ...
-    intcat(ensdata([rb + 7+2*[0:header.ndat-1]',...
-                    rb + 8+2*[0:header.ndat-1]']),8);
+header.nbytes = intcat(ensdata((3:4))',8);
+header.ndat = ensdata(6);
+header.offsets = ...
+    intcat(ensdata([7+2*[0:header.ndat-1]',...
+                    8+2*[0:header.ndat-1]']),8);
 header.ids = intcat(ensdata([header.offsets+1,header.offsets+2]),8);
 
 
@@ -209,8 +256,8 @@ function config = get_fixed_leader(ensdata,setup);
 config = struct();
 
 getopt=@(n,opts) opts{n+1};
-offset = intcat(ensdata([7:8] + setup.ross_bytes)',8);
-dat = double(ensdata(offset + 1 + setup.ross_bytes:end));
+offset = intcat(ensdata([7:8])',8);
+dat = double(ensdata(offset + 1:end));
 %
 config.firmware_ver             = str2num([num2str(dat(3)) '.' num2str(dat(4))]);
 config.config                   = [dec2bin(dat(6),8) '-' dec2bin(dat(5),8)];
@@ -258,12 +305,11 @@ end
 config.ranges = config.bin1_dist + ...
     [0:config.n_cells-1]'*config.cell_size;
 
-
 %----------------------------------------------------------
 % Fill the ith ensemble of an adcp data structure using 
 % the given ensemble data.
 %----------------------------------------------------------
-function [adcp aidx] = get_data(adcp,ensdata,aidx,setup)
+function [adcp aidx pr pidx] = get_data(adcp,ensdata,aidx,setup)
 header = get_header(ensdata,setup);
 config = get_fixed_leader(ensdata,setup);
 pr = match_profile(config,adcp);
@@ -289,11 +335,13 @@ end
 
 aidx(pr) = aidx(pr) + 1;
 i = aidx(pr);
+pidx = i;
 
 nc = adcp(pr).config.n_cells;
 nb = adcp(pr).config.n_beams;
 
-known_ids = [0 128 256 512 768 1024 1280 1536 2560 3072];
+known_ids = [0 128 256 512 768 1024 1280 1536 2560 3072,...
+             3841 2816 28672 28673 28674 12800 28676]; % TODO: What are these IDs?
 ids_known = ismember(header.ids,known_ids);
 if any(~ids_known)
     fprintf('\r')
@@ -310,11 +358,11 @@ for j = 2:length(header.ids)
 
       case 128 % variable leader
         % Get ROSS timestamp with variable leader
-        if setup.ross_bytes > 0
-            adcp(pr).ross_mtime(i) = datenum(...
-                double(ensdata(2 + [1:6]))' + ...
-                [2000 0 0 0 0 ensdata(2+7)/100]);
-        end
+        % if setup.ross_bytes > 0
+        %     adcp(pr).ross_mtime(i) = datenum(...
+        %         double(ensdata(2 + [1:6]))' + ...
+        %         [2000 0 0 0 0 ensdata(2+7)/100]);
+        % end
         %
         offset = header.offsets(j) + 1;
         vl = double(ensdata(offset:end));
