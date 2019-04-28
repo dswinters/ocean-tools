@@ -124,6 +124,9 @@ end
 % For a sequence [127 127 127], only count the first pair as a header
 rm = false(size(h));
 rm([false;diff(h)==1]) = true;
+h = h(~rm);
+
+rm = false(size(h));
 
 if setup.ross_bytes > 0
 
