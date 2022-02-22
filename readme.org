@@ -1,0 +1,33 @@
+#+TITLE: Ocean Tools
+
+
+* General Parsing Functions
+
+The parsing functions here for GPS, Teledyne RDI ADCP, and Nortek ADCP data are significantly faster (sometimes several orders of magnitude) than most code floating around on the internet. In contrast to other code which parse all bytes/characters sequentially, these functions identify data payloads, group them by type, convert bytes/characters to data matrices, and process them into their final formats with efficient column-wise operations.
+
+Structuring the code this way not only increases speed, but makes adding support for new or updated data types straightforward and user-friendly.
+
+These are all compatible with single or multiple files. Input files can be passed as a cell array of absolute file paths, or as the output of MATLAB's ~dir~ command identifying files to be parsed.
+
+- Use ~parse_adcp~ to quickly parse Teledyne RDI ADCP data. Compatible with Workhorse, Sentinel, and PAVS binary adcp data. Orders of magnitude faster than the frequently used ~rdradcp.m~ function with robust checksum verification. The code closely mirrors the description of data formats in RDI's official manuals, making it easily extensible if RDI modifies their format or if one wants to parse additional fields.
+
+- Use ~parse_gps~ to parse text-formatted NMEA sentences ($GPGGA, $GPRMC, etc.). Regular expressions defining different sentences and instructions for converting fields to useful numeric data are defined separately from all parsing logic, making this code easy to use or extend.
+
+- ~parse_nortek_adcp~ is similar to ~parse_adcp~, but works for Nortek ADCP data. Tested and verified for Nortek Signature series instruments. Again, code for handling bytes within packets closely follows data format definitions in Nortek's manuals, making this easy to work with or modify.
+
+* Utilities
+- ~adcp_beam2earth~ uses quaternion rotations to efficiently transform beam-coordinate velocity data to earth-coordinate velocities for 4- and 5-beam ADCP data in a single matrix-quaternion array multiplication.
+
+- ~prep_nbeam_solutions~ fills in NaN-masked beam-coordinate velocity data using other beams wherever possible. Groups samples by unique combinations of masked beams and operates on all samples at once, making this procedure near-instant for even large data sets. Currently supports:
+
+  - 3-beam solutions for 4-beam ADCPs
+  - 4-beam solutions for 5-beam ADCPs with a bad side beam
+  - 3-beam solutions for 5-beam ADCPs with a bad side and center beam
+  - 3-beam solutions for 5-beam ADCP's with 2 adjacent bad side beams
+
+- ~gps_ltln2vel~ converts latitude and logitude vectors to a flat coordinate system centered at the mean location. For applications covering wide lat/lon ranges, a more sophisticated map projection should be used.
+
+- ~gps_line_interp~ assigns timestamps to non-timestamped NMEA sentences (e.g. $HEHDT lines) in navigational output files using line-number interpolation . Compatible with output from ~parse_gps~
+
+* Other
+Other functions are for more specific use-cases and not documented here.
