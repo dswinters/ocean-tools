@@ -9,9 +9,9 @@ Structuring the code this way not only increases speed, but makes adding support
 
 These are all compatible with single or multiple files. Input files can be passed as a cell array of absolute file paths, or as the output of MATLAB's ~dir~ command identifying files to be parsed.
 
-- Use ~parse_adcp~ to quickly parse Teledyne RDI ADCP data. Compatible with Workhorse, Sentinel, and PAVS binary adcp data. Orders of magnitude faster than the frequently used ~rdradcp.m~ function with robust checksum verification. The code closely mirrors the description of data formats in RDI's official manuals, making it easily extensible if RDI modifies their format or if one wants to parse additional fields.
+- ~parse_adcp~ quickly parses Teledyne RDI ADCP data. Compatible with Workhorse, Sentinel, and PAVS binary adcp data. Supports multi-profile modes where pings with different configurations are interleaved. Orders of magnitude faster than the frequently used ~rdradcp.m~ function, with robust checksum verification. The code closely mirrors the description of data formats in RDI's official manuals, making it easily extensible if RDI modifies their format or if one wants to parse additional fields.
 
-- Use ~parse_gps~ to parse text-formatted NMEA sentences ($GPGGA, $GPRMC, etc.). Regular expressions defining different sentences and instructions for converting fields to useful numeric data are defined separately from all parsing logic, making this code easy to use or extend.
+- ~parse_gps~ parses text-formatted NMEA sentences ($GPGGA, $GPRMC, etc.). Regular expressions defining different sentences and instructions for converting fields to useful numeric data are defined separately from all parsing logic, making this code easy to use or extend for new types of navigational data.
 
 - ~parse_nortek_adcp~ is similar to ~parse_adcp~, but works for Nortek ADCP data. Tested and verified for Nortek Signature series instruments. Again, code for handling bytes within packets closely follows data format definitions in Nortek's manuals, making this easy to work with or modify.
 
